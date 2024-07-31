@@ -34,6 +34,8 @@ def create_cluster_posterize(image_path, clusters=10, pre_blur=True):
     # ]
     # dominant_colors = np.array(dominant_colors, dtype=np.uint8)
     print(dominant_colors)
+    #printing clusters one by one
+    dominant_cluster.plot_clusters(image, quantized_labels, dominant_colors)
 
     smooth_labels = process.smoothen(quantized_labels.reshape(image.shape[:-1]))
     pbn_image = dominant_colors[smooth_labels].reshape(image.shape)

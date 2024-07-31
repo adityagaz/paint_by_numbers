@@ -3,9 +3,9 @@ import faiss
 from sklearn.cluster import KMeans
 import numpy as np
 from collections import Counter
+import matplotlib.pyplot as plt
 
 import image_utils
-
 
 def kmeans_faiss(dataset, k, use_gpu):
     """
@@ -32,7 +32,6 @@ def kmeans_faiss(dataset, k, use_gpu):
 
     return centroids.reshape(k, dims)
 
-
 def compute_cluster_assignment(centroids, data, use_gpu):
     dims = centroids.shape[1]
 
@@ -49,7 +48,6 @@ def compute_cluster_assignment(centroids, data, use_gpu):
     _, labels = index.search(data, 1)
 
     return labels.ravel()
-
 
 def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
     # Must pass FP32 data to kmeans_faiss since faiss does not support uint8
@@ -71,11 +69,47 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
         centroid_size_tuples = [
             (centroids[k], val / len(labels)) for k, val in counts
         ]
-        #this bar_colors function is printing all the extracted colors into a bar plot
+        # This bar_colors function is printing all the extracted colors into a bar plot
         bar_image = image_utils.bar_colors(centroid_size_tuples)
-
         return centroids, labels, bar_image
 
 
-
     return centroids, labels
+
+
+def plot_clusters(image, labels, centroids):
+    # Reshape labels to the shape of the original image
+    labels_reshaped = labels.reshape(image.shape[0], image.shape[1])
+
+    # Calculate number of rows and columns for subplots
+    n_clusters = centroids.shape[0]
+    n_cols = 5
+    n_rows = (n_clusters + n_cols - 1) // n_cols  # Ceiling division
+
+    # Set the figure size to fit 1200 pixels width
+    fig_width = 12  # 1200 pixels
+    fig_height = 2.4 * n_rows  # Adjust height to maintain aspect ratio
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height))
+
+    # Flatten axes array if there are multiple rows
+    if n_rows > 1:
+        axes = axes.flatten()
+
+    # Iterate through each cluster index
+    for cluster_index in range(n_clusters):
+        # Create an image for the current cluster with a white background
+        cluster_image = np.ones_like(image) * 255  # Set background to white
+        cluster_image[labels_reshaped == cluster_index] = image[labels_reshaped == cluster_index]
+
+        # Display the cluster image
+        ax = axes[cluster_index]
+        ax.imshow(cluster_image)
+        ax.set_title(f'Cluster {cluster_index + 1}', fontsize=14)
+        ax.axis('off')
+
+    # Hide any remaining empty subplots
+    for ax in axes[n_clusters:]:
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
