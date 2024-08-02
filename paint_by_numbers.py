@@ -3,6 +3,7 @@ import os
 import dominant_cluster
 import image_utils
 import process
+
 from scipy import ndimage as ndi
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,7 +14,6 @@ def simple_matrix_to_image(mat, palette):
     simple_mat_flat = np.array(
         [[col for col in palette[index]] for index in mat.flatten()])
     return simple_mat_flat.reshape(mat.shape + (3,))
-
 
 def create_cluster_posterize(image_path, clusters=10, pre_blur=True):
     image = image_utils.load_image(image_path, resize=False)
@@ -99,7 +99,6 @@ def are_neighbors_same(mat, x, y):
                 return False
     return True
 
-
 def outline(mat):
     ymax, xmax, _ = mat.shape
     line_mat = np.array([
@@ -110,8 +109,6 @@ def outline(mat):
                         dtype=np.uint8)
 
     return line_mat.reshape((ymax, xmax))
-
-
 def process_image(input_image_path, output_image_path, num_of_clusters=5, save_outline=False, min_contour_area=80):
     pbn_image, dominant_colors = create_cluster_posterize(input_image_path, clusters=num_of_clusters)
     image_utils.save_image(pbn_image, output_image_path)

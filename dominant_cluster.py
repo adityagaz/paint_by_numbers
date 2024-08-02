@@ -4,9 +4,37 @@ from sklearn.cluster import KMeans
 import numpy as np
 from collections import Counter
 import matplotlib.pyplot as plt
-
+import matplotlib.colors as mcolors
 import image_utils
 
+import cv2
+from skimage import color
+
+
+def rgb_to_hsv(rgb):
+    """
+    Convert RGB to HSV color space using OpenCV.
+    """
+    rgb = np.array(rgb, dtype=np.uint8).reshape(1, 1, 3)
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    return hsv.flatten().astype(float)
+
+
+def hsv_color_difference(hsv1, hsv2):
+    """
+    Calculate the perceptual difference between two HSV colors.
+    """
+    h_diff = min(abs(hsv1[0] - hsv2[0]), 180 - abs(hsv1[0] - hsv2[0])) / 180.0
+    s_diff = abs(hsv1[1] - hsv2[1]) / 255.0
+    v_diff = abs(hsv1[2] - hsv2[2]) / 255.0
+    return h_diff + s_diff + v_diff
+def rgb_to_lab(rgb):
+    """
+    Convert RGB to CIELAB color space using skimage.
+    """
+    rgb = np.array(rgb, dtype=np.uint8).reshape(1, 1, 3)
+    lab = color.rgb2lab(rgb)
+    return lab.flatten()
 def kmeans_faiss(dataset, k, use_gpu):
     """
     Runs KMeans on GPU if available, otherwise on CPU"
@@ -15,7 +43,7 @@ def kmeans_faiss(dataset, k, use_gpu):
     cluster = faiss.Clustering(dims, k)
     cluster.verbose = False
     cluster.niter = 20
-    cluster.max_points_per_centroid = 10**7
+    cluster.max_points_per_centroid = 10 ** 7
 
     if use_gpu:
         resources = faiss.StandardGpuResources()
@@ -31,6 +59,7 @@ def kmeans_faiss(dataset, k, use_gpu):
     centroids = faiss.vector_float_to_array(cluster.centroids)
 
     return centroids.reshape(k, dims)
+
 
 def compute_cluster_assignment(centroids, data, use_gpu):
     dims = centroids.shape[1]
@@ -49,6 +78,42 @@ def compute_cluster_assignment(centroids, data, use_gpu):
 
     return labels.ravel()
 
+
+def color_distance(c1, c2):
+    """
+    Calculate the Euclidean distance between two colors in CIELAB space.
+    """
+    lab1 = rgb_to_lab(c1)
+    lab2 = rgb_to_lab(c2)
+    return np.linalg.norm(lab1 - lab2)
+
+
+def find_closest_palette_color(color, palette, palette_hex):
+    """
+    Find the closest color in the palette to the given color.
+    Print similarity scores for debugging.
+    """
+    hsv_color = rgb_to_hsv(color)
+    distances = [hsv_color_difference(hsv_color, rgb_to_hsv(p)) for p in palette]
+
+    # Print the similarity scores
+    print(f"Color: {color} - HSV: {hsv_color}")
+    for i, dist in enumerate(distances):
+        print(f"  Palette Color {palette_hex[i]}: {palette[i]} - Distance: {dist}")
+
+    return palette[np.argmin(distances)]
+
+def replace_colors_with_palette(dominant_colors, palette, palette_hex):
+    """
+    Replace the dominant colors with the closest colors from the palette.
+    """
+    replaced_colors = np.array([find_closest_palette_color(c, palette, palette_hex) for c in dominant_colors])
+    replaced_colors = np.clip(replaced_colors, 0, 255).astype(np.uint8)
+    return replaced_colors
+
+
+
+
 def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
     # Must pass FP32 data to kmeans_faiss since faiss does not support uint8
     flat_image = image.reshape(
@@ -64,18 +129,46 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
         centroids = clt.cluster_centers_.astype(np.uint8)
         labels = clt.labels_.astype(np.uint8)
 
+    # Define the color palette
+    palette_hex = [
+        "#907954", "#B59E5F", "#00B89F", "#D2B04C", "#2D2C2F", "#8C83BA", "#DDED1E", "#C65D52",
+        "#422D22", "#00675B", "#F7FE00", "#F99471", "#F44741", "#EE9626", "#9BB7D4", "#2A52BE",
+        "#FBDB32", "#0047AB", "#0047AB", "#478589", "#C47E5A", "#FF4040", "#AE0E36", "#CF3854",
+        "#305679", "#5D3954", "#4E3629", "#314F40", "#6A0DAD", "#8B008B", "#009473", "#FFFDD0",
+        "#FEDC5A", "#C28F5A", "#CB8E16", "#88B04B", "#858E90", "#036A3E", "#CD5C5C", "#FAB230",
+        "#9FAF6C", "#FDF436", "#3B83BD", "#84C3BE", "#D23C77", "#395FA3", "#834655", "#602A7A",
+        "#721660", "#F8C81A", "#39FF14", "#FF6700", "#F535AA", "#FFFF00", "#424632", "#FF781F",
+        "#898085", "#F8F6F0", "#64B3C9", "#2A894A", "#80C35D", "#EC7F40", "#D33166", "#D97941",
+        "#ECAF39", "#468FAA", "#383E99", "#FF0490", "#F8CEA4", "#3D3472", "#F85F4A", "#F1AB38",
+        "#68553A", "#C91A09", "#D95030", "#305B3F", "#D84645", "#BCC6CC", "#2271B3", "#4FB9AF",
+        "#367588", "#8D2B00", "#F3F4F7", "#3F888F", "#1A2928", "#599FA2", "#2A5198", "#F2DEB6",
+        "#67492F", "#E34234", "#E94C3E", "#538F7C", "#330066", "#FFFFFF", "#FFFF00", "#CB9D06",
+        "#FEFFFA", "#EDB525", "#C9822A", "#F7D087", "#913832", "#BB3726", "#8A3324", "#D6AD60",
+        "#D2C1A3", "#FABEAE", "#FAEBD7"
+    ]
+    palette_rgb = np.array([mcolors.hex2color(c) for c in palette_hex]) * 255
+
+    # Replace the dominant colors with the closest colors from the palette
+    replaced_colors = replace_colors_with_palette(centroids, palette_rgb, palette_hex)
+
+    # Ensure values are within the valid range and dtype before plotting
+    replaced_colors = np.clip(replaced_colors, 0, 255).astype(np.uint8)
+
     if plot:
         counts = Counter(labels).most_common()
         centroid_size_tuples = [
-            (centroids[k], val / len(labels)) for k, val in counts
+            (replaced_colors[k], val / len(labels)) for k, val in counts
         ]
         # This bar_colors function is printing all the extracted colors into a bar plot
         bar_image = image_utils.bar_colors(centroid_size_tuples)
-        return centroids, labels, bar_image
 
+        # Compute and print sorted cluster areas
+        cluster_areas = [np.sum(labels == i) for i in range(n_clusters)]
+        sorted_cluster_areas = sorted(cluster_areas, reverse=True)
+        print("Sorted cluster areas (in descending order):", sorted_cluster_areas)
 
-    return centroids, labels
-
+        return replaced_colors, labels, bar_image
+    return replaced_colors, labels
 
 def plot_clusters(image, labels, centroids):
     # Reshape labels to the shape of the original image
