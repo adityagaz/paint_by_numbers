@@ -100,6 +100,27 @@ if uploaded_file is not None:
         st.image(pbn_image, caption='PBN Image.', use_column_width=True)
         st.image(outline_image, caption='Outline Image.', use_column_width=True)
 
+        # Add zoom functionality by displaying the image at a larger size
+        st.write("Zoomed PBN Image:")
+        st.components.v1.html(
+            f"""
+            <div style="overflow: auto; width:800px; height:600px">
+                <img src="data:image/png;base64,{Image.fromarray(pbn_image).tobytes().decode('utf-8')}" style="width:1000px; height:auto;">
+            </div>
+            """,
+            height=600,
+        )
+
+        st.write("Zoomed Outline Image:")
+        st.components.v1.html(
+            f"""
+            <div style="overflow: auto; width:800px; height:600px">
+                <img src="data:image/png;base64,{Image.fromarray(outline_image).tobytes().decode('utf-8')}" style="width:1000px; height:auto;">
+            </div>
+            """,
+            height=600,
+        )
+
         pbn_img = Image.fromarray(pbn_image.astype('uint8'))
         buf_pbn = io.BytesIO()
         pbn_img.save(buf_pbn, format="PNG")
