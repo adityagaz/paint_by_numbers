@@ -96,6 +96,11 @@ def find_closest_palette_color(color, palette, palette_hex):
     hsv_color = rgb_to_hsv(color)
     distances = [hsv_color_difference(hsv_color, rgb_to_hsv(p)) for p in palette]
 
+    # Debug: Check if distances list is empty
+    if not distances:
+        print(f"Error: No distances calculated for color {color}")
+        return np.array([0, 0, 0])  # Return black or some default color
+
     # Print the similarity scores
     print(f"Color: {color} - HSV: {hsv_color}")
     for i, dist in enumerate(distances):
@@ -112,17 +117,15 @@ def replace_colors_with_palette(dominant_colors, palette, palette_hex):
     return replaced_colors
 
 
-
-
 def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
-    # Must pass FP32 data to kmeans_faiss since faiss does not support uint8
-    flat_image = image.reshape(
-        (image.shape[0] * image.shape[1], 3)).astype(np.float32)
+    if image is None or image.size == 0:
+        raise ValueError("Invalid image provided")
+
+    flat_image = image.reshape((image.shape[0] * image.shape[1], 3)).astype(np.float32)
 
     if use_gpu and faiss.get_num_gpus() > 0:
         centroids = kmeans_faiss(flat_image, n_clusters, use_gpu)
-        labels = compute_cluster_assignment(centroids,
-                                            flat_image, use_gpu).astype(np.uint8)
+        labels = compute_cluster_assignment(centroids, flat_image, use_gpu).astype(np.uint8)
         centroids = centroids.astype(np.uint8)
     else:
         clt = KMeans(n_clusters=n_clusters).fit(flat_image)
@@ -131,8 +134,9 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
 
     # Define the color palette
     palette_hex = [
+        "#FFFDD0", "#F8CEA4", "#F8F6F0", "#F3F4F7", "#FEFFFA", "#F2DEB6", "#C47E5A", "#907954",
+        "#B59E5F", "#C28F5A", "#4E3629", "#422D22", "#68553A", "#67492F", "#8D2B00",
         "#907954", "#B59E5F", "#00B89F", "#D2B04C", "#2D2C2F", "#8C83BA", "#DDED1E", "#C65D52",
-        "#422D22", "#00675B", "#F7FE00", "#F99471", "#F44741", "#EE9626", "#9BB7D4", "#2A52BE",
         "#FBDB32", "#0047AB", "#0047AB", "#478589", "#C47E5A", "#FF4040", "#AE0E36", "#CF3854",
         "#305679", "#5D3954", "#4E3629", "#314F40", "#6A0DAD", "#8B008B", "#009473", "#FFFDD0",
         "#FEDC5A", "#C28F5A", "#CB8E16", "#88B04B", "#858E90", "#036A3E", "#CD5C5C", "#FAB230",
@@ -148,10 +152,19 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
     ]
     palette_rgb = np.array([mcolors.hex2color(c) for c in palette_hex]) * 255
 
+    # Define skin tone colors
+    skin_tone_hex = [
+        "#FFFDD0", "#F8CEA4", "#F8F6F0", "#F3F4F7", "#FEFFFA", "#F2DEB6", "#C47E5A", "#907954",
+        "#B59E5F", "#C28F5A", "#4E3629", "#422D22", "#68553A", "#67492F", "#8D2B00"
+    ]
+    skin_tone_rgb = np.array([mcolors.hex2color(c) for c in skin_tone_hex]) * 255
+
+    # Initialize visited arrays
+    visited = [False] * len(palette_rgb)
+    skin_tone_visited = [False] * len(skin_tone_rgb)
+
     # Replace the dominant colors with the closest colors from the palette
     replaced_colors = replace_colors_with_palette(centroids, palette_rgb, palette_hex)
-
-    # Ensure values are within the valid range and dtype before plotting
     replaced_colors = np.clip(replaced_colors, 0, 255).astype(np.uint8)
 
     if plot:
@@ -159,16 +172,93 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
         centroid_size_tuples = [
             (replaced_colors[k], val / len(labels)) for k, val in counts
         ]
-        # This bar_colors function is printing all the extracted colors into a bar plot
         bar_image = image_utils.bar_colors(centroid_size_tuples)
 
-        # Compute and print sorted cluster areas
         cluster_areas = [np.sum(labels == i) for i in range(n_clusters)]
+        sorted_indices = np.argsort(cluster_areas)[::-1]
         sorted_cluster_areas = sorted(cluster_areas, reverse=True)
         print("Sorted cluster areas (in descending order):", sorted_cluster_areas)
 
+        # Maintain an array of distances
+        distances = [find_closest_palette_color_distances(centroid, palette_rgb) for centroid in centroids]
+
+        # Color mapping with special handling for skin tones
+        color_mapping = {}
+        for cluster_index in sorted_indices:
+            sorted_distances = np.argsort(distances[cluster_index])
+            is_skin_tone = any(
+                np.allclose(centroids[cluster_index], skin_color, atol=15) for skin_color in skin_tone_rgb)
+
+            if is_skin_tone:
+                for palette_index, skin_color in enumerate(skin_tone_rgb):
+                    if not skin_tone_visited[palette_index]:
+                        color_mapping[cluster_index] = skin_color
+                        skin_tone_visited[palette_index] = True
+                        break
+                else:
+                    # If all skin tones are visited, pick the closest available skin tone
+                    for skin_color, visited_flag in zip(skin_tone_rgb, skin_tone_visited):
+                        if not visited_flag:
+                            color_mapping[cluster_index] = skin_color
+                            break
+            else:
+                for palette_index in sorted_distances:
+                    if not visited[palette_index]:
+                        color_mapping[cluster_index] = palette_rgb[palette_index]
+                        visited[palette_index] = True
+                        break
+
+        print("Color mapping (cluster_index -> palette_color):")
+        for cluster_index, palette_color in color_mapping.items():
+            print(f"Cluster {cluster_index} -> {palette_color}")
+
+        labels_reshaped = labels.reshape(image.shape[0], image.shape[1])
+        new_image = np.zeros_like(image)
+        for cluster_index, palette_color in color_mapping.items():
+            new_image[labels_reshaped == cluster_index] = palette_color
+
         return replaced_colors, labels, bar_image
     return replaced_colors, labels
+
+
+def find_closest_palette_color_distances(centroid, palette):
+    hsv_centroid = rgb_to_hsv(centroid)
+    return [hsv_color_difference(hsv_centroid, rgb_to_hsv(p)) for p in palette]
+
+
+def find_closest_palette_color_distances(centroid, palette):
+    hsv_centroid = rgb_to_hsv(centroid)
+    return [hsv_color_difference(hsv_centroid, rgb_to_hsv(p)) for p in palette]
+
+
+def find_closest_palette_color_distances(centroid, palette):
+    hsv_centroid = rgb_to_hsv(centroid)
+    return [hsv_color_difference(hsv_centroid, rgb_to_hsv(p)) for p in palette]
+
+def find_closest_palette_color_distances(centroid, palette):
+    hsv_centroid = rgb_to_hsv(centroid)
+    return [hsv_color_difference(hsv_centroid, rgb_to_hsv(p)) for p in palette]
+
+
+def find_closest_palette_color(color, palette, palette_hex):
+    """
+    Find the closest color in the palette to the given color.
+    Print similarity scores for debugging.
+    """
+    hsv_color = rgb_to_hsv(color)
+    distances = [hsv_color_difference(hsv_color, rgb_to_hsv(p)) for p in palette]
+
+    # Debug: Check if distances list is empty
+    if not distances:
+        print(f"Error: No distances calculated for color {color}")
+        return np.array([0, 0, 0])  # Return black or some default color
+
+    # Print the similarity scores
+    print(f"Color: {color} - HSV: {hsv_color}")
+    for i, dist in enumerate(distances):
+        print(f"  Palette Color {palette_hex[i]}: {palette[i]} - Distance: {dist}")
+
+    return palette[np.argmin(distances)]
 
 def plot_clusters(image, labels, centroids):
     # Reshape labels to the shape of the original image

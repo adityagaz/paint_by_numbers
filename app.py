@@ -7,12 +7,11 @@ import dominant_cluster
 from PIL import Image
 import io
 import matplotlib.pyplot as plt
-
+import paint_by_numbers
 
 def simple_matrix_to_image(mat, palette):
     simple_mat_flat = np.array([[col for col in palette[index]] for index in mat.flatten()])
     return simple_mat_flat.reshape(mat.shape + (3,))
-
 
 def create_cluster_posterize(image, clusters=10, pre_blur=True):
     if pre_blur:
@@ -27,10 +26,9 @@ def create_cluster_posterize(image, clusters=10, pre_blur=True):
 
     smooth_labels = process.smoothen(quantized_labels.reshape(image.shape[:-1]))
     pbn_image = dominant_colors[smooth_labels].reshape(image.shape)
-    outline_image = process_image2(pbn_image, dominant_colors)  # Generate the outline image
+    outline_image = process_image2(pbn_image, dominant_colors, min_contour_area)  # Generate the outline image
 
     return pbn_image, outline_image, dominant_colors
-
 
 def process_image2(pbn_image, dominant_colors, min_contour_area=100):
     gray = cv2.cvtColor(pbn_image, cv2.COLOR_BGR2GRAY)
@@ -57,7 +55,6 @@ def process_image2(pbn_image, dominant_colors, min_contour_area=100):
 
     return canvas
 
-
 def are_neighbors_same(mat, x, y):
     width = len(mat[0])
     height = len(mat)
@@ -72,7 +69,6 @@ def are_neighbors_same(mat, x, y):
                 return False
     return True
 
-
 def outline(mat):
     ymax, xmax, _ = mat.shape
     line_mat = np.array([
@@ -82,12 +78,11 @@ def outline(mat):
     ], dtype=np.uint8)
     return line_mat.reshape((ymax, xmax))
 
-
 st.title("Paint-by-Numbers Image Processor")
 
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
-num_clusters = st.slider("Number of Colors", 1, 20, 5)
+num_clusters = st.slider("Number of Colors", 1, 20, 10)
 min_contour_area = st.slider("Minimum Contour Area", 1, 500, 80)
 
 if uploaded_file is not None:
@@ -99,7 +94,8 @@ if uploaded_file is not None:
     st.write("")
 
     if st.button("Process"):
-        pbn_image, outline_image, _ = create_cluster_posterize(image, clusters=num_clusters, pre_blur=True)
+        with st.spinner("Processing..."):
+            pbn_image, outline_image, _ = create_cluster_posterize(image, clusters=num_clusters, pre_blur=True)
 
         st.image(pbn_image, caption='PBN Image.', use_column_width=True)
         st.image(outline_image, caption='Outline Image.', use_column_width=True)
@@ -114,5 +110,4 @@ if uploaded_file is not None:
         buf_outline = io.BytesIO()
         outline_img.save(buf_outline, format="PNG")
         byte_im_outline = buf_outline.getvalue()
-        st.download_button(label="Download Outline Image", data=byte_im_outline, file_name="outline_image.png",
-                           mime="image/png")
+        st.download_button(label="Download Outline Image", data=byte_im_outline, file_name="outline_image.png", mime="image/png")
