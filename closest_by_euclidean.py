@@ -1,13 +1,16 @@
 import numpy as np
 
+
 # Convert hex to RGB
 def hex_to_rgb(hex_code):
     hex_code = hex_code.lstrip('#')
-    return tuple(int(hex_code[i:i+2], 16) for i in (0, 2, 4))
+    return tuple(int(hex_code[i:i + 2], 16) for i in (0, 2, 4))
+
 
 # Calculate Euclidean distance
 def euclidean_distance(c1, c2):
     return np.sqrt(sum((a - b) ** 2 for a, b in zip(c1, c2)))
+
 
 # Find the closest color
 def find_closest_colors(rgb_values, palette):
@@ -18,6 +21,7 @@ def find_closest_colors(rgb_values, palette):
         closest_color_index = np.argmin(distances)
         closest_colors.append(palette[closest_color_index])
     return closest_colors
+
 
 palette = [
     "#907954", "#B59E5F", "#00B89F", "#D2B04C", "#2D2C2F", "#8C83BA", "#DDED1E", "#C65D52",

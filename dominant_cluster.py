@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import faiss
 from sklearn.cluster import KMeans
 import numpy as np
 from collections import Counter
@@ -35,49 +34,6 @@ def rgb_to_lab(rgb):
     rgb = np.array(rgb, dtype=np.uint8).reshape(1, 1, 3)
     lab = color.rgb2lab(rgb)
     return lab.flatten()
-def kmeans_faiss(dataset, k, use_gpu):
-    """
-    Runs KMeans on GPU if available, otherwise on CPU"
-    """
-    dims = dataset.shape[1]
-    cluster = faiss.Clustering(dims, k)
-    cluster.verbose = False
-    cluster.niter = 20
-    cluster.max_points_per_centroid = 10 ** 7
-
-    if use_gpu:
-        resources = faiss.StandardGpuResources()
-        config = faiss.GpuIndexFlatConfig()
-        config.useFloat16 = False
-        config.device = 0
-        index = faiss.GpuIndexFlatL2(resources, dims, config)
-    else:
-        index = faiss.IndexFlatL2(dims)
-
-    # perform kmeans
-    cluster.train(dataset, index)
-    centroids = faiss.vector_float_to_array(cluster.centroids)
-
-    return centroids.reshape(k, dims)
-
-
-def compute_cluster_assignment(centroids, data, use_gpu):
-    dims = centroids.shape[1]
-
-    if use_gpu:
-        resources = faiss.StandardGpuResources()
-        config = faiss.GpuIndexFlatConfig()
-        config.useFloat16 = False
-        config.device = 0
-        index = faiss.GpuIndexFlatL2(resources, dims, config)
-    else:
-        index = faiss.IndexFlatL2(dims)
-
-    index.add(centroids)
-    _, labels = index.search(data, 1)
-
-    return labels.ravel()
-
 
 def color_distance(c1, c2):
     """
@@ -123,14 +79,9 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
 
     flat_image = image.reshape((image.shape[0] * image.shape[1], 3)).astype(np.float32)
 
-    if use_gpu and faiss.get_num_gpus() > 0:
-        centroids = kmeans_faiss(flat_image, n_clusters, use_gpu)
-        labels = compute_cluster_assignment(centroids, flat_image, use_gpu).astype(np.uint8)
-        centroids = centroids.astype(np.uint8)
-    else:
-        clt = KMeans(n_clusters=n_clusters).fit(flat_image)
-        centroids = clt.cluster_centers_.astype(np.uint8)
-        labels = clt.labels_.astype(np.uint8)
+    clt = KMeans(n_clusters=n_clusters).fit(flat_image)
+    centroids = clt.cluster_centers_.astype(np.uint8)
+    labels = clt.labels_.astype(np.uint8)
 
     # Define the color palette
     palette_hex = [
@@ -189,7 +140,7 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
             is_skin_tone = any(
                 np.allclose(centroids[cluster_index], skin_color, atol=15) for skin_color in skin_tone_rgb)
 
-            if is_skin_tone:
+            if (is_skin_tone):
                 for palette_index, skin_color in enumerate(skin_tone_rgb):
                     if not skin_tone_visited[palette_index]:
                         color_mapping[cluster_index] = skin_color
@@ -219,7 +170,6 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
 
         return replaced_colors, labels, bar_image
     return replaced_colors, labels
-
 
 def find_closest_palette_color_distances(centroid, palette):
     hsv_centroid = rgb_to_hsv(centroid)

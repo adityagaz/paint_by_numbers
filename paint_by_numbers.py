@@ -3,17 +3,16 @@ import os
 import dominant_cluster
 import image_utils
 import process
-
-from scipy import ndimage as ndi
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import ndimage
 import cv2
+
 
 def simple_matrix_to_image(mat, palette):
     simple_mat_flat = np.array(
         [[col for col in palette[index]] for index in mat.flatten()])
     return simple_mat_flat.reshape(mat.shape + (3,))
+
 
 def create_cluster_posterize(image_path, clusters=10, pre_blur=True):
     image = image_utils.load_image(image_path, resize=False)
@@ -27,14 +26,8 @@ def create_cluster_posterize(image_path, clusters=10, pre_blur=True):
     print(type(dominant_colors))
     plt.imshow([dominant_colors])
     plt.show()
-
-    # Update dominant colors
-    # dominant_colors = [
-    #     [250, 235, 215], [104, 85, 58], [248, 206, 164], [26, 41, 40], [194, 143, 90]
-    # ]
-    # dominant_colors = np.array(dominant_colors, dtype=np.uint8)
     print(dominant_colors)
-    #printing clusters one by one
+    # printing clusters one by one
     dominant_cluster.plot_clusters(image, quantized_labels, dominant_colors)
 
     smooth_labels = process.smoothen(quantized_labels.reshape(image.shape[:-1]))
@@ -45,13 +38,13 @@ def create_cluster_posterize(image_path, clusters=10, pre_blur=True):
 
     return pbn_image, dominant_colors
 
-def process_image2(pbn_image, dominant_colors, min_contour_area=100):
+
+def process_image2(pbn_image, dominant_colors, min_contour_area):
     # Convert the image to grayscale
     gray = cv2.cvtColor(pbn_image, cv2.COLOR_BGR2GRAY)
 
     # Edge detection using Canny
     edges = cv2.Canny(gray, 50, 150)
-
     # Find contours
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -85,6 +78,7 @@ def process_image2(pbn_image, dominant_colors, min_contour_area=100):
 
     return canvas
 
+
 def are_neighbors_same(mat, x, y):
     width = len(mat[0])
     height = len(mat)
@@ -94,10 +88,11 @@ def are_neighbors_same(mat, x, y):
     for i in range(0, len(xRel)):
         xx = x + xRel[i]
         yy = y + yRel[i]
-        if xx >= 0 and xx < width and yy >= 0 and yy < height:
+        if 0 <= xx < width and 0 <= yy < height:
             if (mat[yy][xx] != val).all():
                 return False
     return True
+
 
 def outline(mat):
     ymax, xmax, _ = mat.shape
@@ -106,9 +101,11 @@ def outline(mat):
         for y in range(0, ymax)
         for x in range(0, xmax)
     ],
-                        dtype=np.uint8)
+        dtype=np.uint8)
 
     return line_mat.reshape((ymax, xmax))
+
+
 def process_image(input_image_path, output_image_path, num_of_clusters=5, save_outline=False, min_contour_area=80):
     pbn_image, dominant_colors = create_cluster_posterize(input_image_path, clusters=num_of_clusters)
     image_utils.save_image(pbn_image, output_image_path)
@@ -119,14 +116,14 @@ def process_image(input_image_path, output_image_path, num_of_clusters=5, save_o
         image_utils.save_image(outline_image, outline_image_path)
 
 
-input_image_path = '/Users/adityashandilya/Downloads/testing/test9.jpg'
-output_image_path = '/Users/adityashandilya/Downloads/testing_output/output_test_1_1_9.jpg'
-num_of_clusters = 15
-save_outline = True
-min_contour_area = 80
-
- # Adjust this value based on the desired minimum contour size
-process_image(input_image_path, output_image_path, num_of_clusters, save_outline, min_contour_area)
-print(f"Image saved successfully at {output_image_path}")
-if save_outline:
-    print(f"Outline image also saved successfully.")
+# input_image_path = '/Users/adityashandilya/Downloads/testing/test9.jpg'
+# output_image_path = '/Users/adityashandilya/Downloads/testing_output/output_test_1_1_9.jpg'
+# num_of_clusters = 15
+# save_outline = True
+# min_contour_area = 80
+#
+# # Adjust this value based on the desired minimum contour size
+# process_image(input_image_path, output_image_path, num_of_clusters, save_outline, min_contour_area)
+# print(f"Image saved successfully at {output_image_path}")
+# if save_outline:
+#     print(f"Outline image also saved successfully.")

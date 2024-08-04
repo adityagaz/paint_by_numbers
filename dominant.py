@@ -3,14 +3,17 @@ import numpy as np
 from collections import Counter
 from sklearn.cluster import KMeans
 
+
 def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
 
 def hex_palette_to_hsv(hex_palette):
     rgb_palette = [hex_to_rgb(hex_color) for hex_color in hex_palette]
     hsv_palette = [cv2.cvtColor(np.uint8([[rgb]]), cv2.COLOR_RGB2HSV)[0][0] for rgb in rgb_palette]
     return hsv_palette
+
 
 def get_dominant_colors(image, n_clusters=10, hex_palette=None):
     image = image.reshape((image.shape[0] * image.shape[1], 3))
@@ -18,7 +21,8 @@ def get_dominant_colors(image, n_clusters=10, hex_palette=None):
     if hex_palette:
         hsv_palette = hex_palette_to_hsv(hex_palette)
         centroids = KMeans(n_clusters, random_state=42).fit(image).cluster_centers_
-        centroids = np.array([hsv_palette[np.argmin(np.linalg.norm(centroid - hsv_palette, axis=1))] for centroid in centroids])
+        centroids = np.array(
+            [hsv_palette[np.argmin(np.linalg.norm(centroid - hsv_palette, axis=1))] for centroid in centroids])
     else:
         centroids = KMeans(n_clusters, random_state=42).fit(image).cluster_centers_
 
@@ -26,7 +30,6 @@ def get_dominant_colors(image, n_clusters=10, hex_palette=None):
     most_common_colors = dict(counts.most_common(n_clusters))
 
     return np.array(list(most_common_colors.keys())), np.array(list(most_common_colors.values()))
-
 
 
 palette_hex = [

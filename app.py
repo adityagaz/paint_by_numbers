@@ -8,17 +8,24 @@ from PIL import Image
 import io
 import matplotlib.pyplot as plt
 import paint_by_numbers
+import time
 
 def simple_matrix_to_image(mat, palette):
     simple_mat_flat = np.array([[col for col in palette[index]] for index in mat.flatten()])
     return simple_mat_flat.reshape(mat.shape + (3,))
 
-def create_cluster_posterize(image, clusters=10, pre_blur=True):
+def create_cluster_posterize(image, clusters=10, pre_blur=True, progress_callback=None):
     if pre_blur:
         image = process.blur_image(image)
 
+    if progress_callback:
+        progress_callback(20)
+
     dominant_colors, quantized_labels, bar_image = dominant_cluster.get_dominant_colors(
         image, n_clusters=clusters, use_gpu=True, plot=True)
+
+    if progress_callback:
+        progress_callback(60)
 
     # Display the color bar
     plt.imshow([dominant_colors])
@@ -26,7 +33,14 @@ def create_cluster_posterize(image, clusters=10, pre_blur=True):
 
     smooth_labels = process.smoothen(quantized_labels.reshape(image.shape[:-1]))
     pbn_image = dominant_colors[smooth_labels].reshape(image.shape)
+
+    if progress_callback:
+        progress_callback(80)
+
     outline_image = process_image2(pbn_image, dominant_colors, min_contour_area)  # Generate the outline image
+
+    if progress_callback:
+        progress_callback(100)
 
     return pbn_image, outline_image, dominant_colors
 
@@ -82,8 +96,10 @@ st.title("Paint-by-Numbers Image Processor")
 
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
-num_clusters = st.slider("Number of Colors", 1, 20, 10)
-min_contour_area = st.slider("Minimum Contour Area", 1, 500, 80)
+num_clusters = st.slider("Number of Colors", 1, 36, 18)
+st.caption("More Colors More Quality")
+min_contour_area = st.slider("Minimum Contour Area", 1, 500, 30)
+st.caption("Less clusters more defined the outline Image")
 
 if uploaded_file is not None:
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
@@ -94,32 +110,20 @@ if uploaded_file is not None:
     st.write("")
 
     if st.button("Process"):
+        progress_text = "Operation in progress. Please wait."
+        my_bar = st.progress(0, text=progress_text)
+
+        def update_progress(percent_complete):
+            my_bar.progress(percent_complete, text=progress_text)
+
         with st.spinner("Processing..."):
-            pbn_image, outline_image, _ = create_cluster_posterize(image, clusters=num_clusters, pre_blur=True)
+            pbn_image, outline_image, _ = create_cluster_posterize(image, clusters=num_clusters, pre_blur=True, progress_callback=update_progress)
+        progress_text = "Completed!"
+        update_progress(100)
+        st.success("Processing completed!")
 
         st.image(pbn_image, caption='PBN Image.', use_column_width=True)
         st.image(outline_image, caption='Outline Image.', use_column_width=True)
-
-        # Add zoom functionality by displaying the image at a larger size
-        st.write("Zoomed PBN Image:")
-        st.components.v1.html(
-            f"""
-            <div style="overflow: auto; width:800px; height:600px">
-                <img src="data:image/png;base64,{Image.fromarray(pbn_image).tobytes().decode('utf-8')}" style="width:1000px; height:auto;">
-            </div>
-            """,
-            height=600,
-        )
-
-        st.write("Zoomed Outline Image:")
-        st.components.v1.html(
-            f"""
-            <div style="overflow: auto; width:800px; height:600px">
-                <img src="data:image/png;base64,{Image.fromarray(outline_image).tobytes().decode('utf-8')}" style="width:1000px; height:auto;">
-            </div>
-            """,
-            height=600,
-        )
 
         pbn_img = Image.fromarray(pbn_image.astype('uint8'))
         buf_pbn = io.BytesIO()
