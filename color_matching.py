@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import colorsys
 
+# Constants for the reference white point (D65 illuminant)
+REF_X = 95.047
+REF_Y = 100.000
+REF_Z = 108.883
 
 def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
@@ -12,73 +15,135 @@ def rgb_to_hex(rgb_color):
     return '#{:02x}{:02x}{:02x}'.format(*rgb_color)
 
 
-def rgb_to_hsv(r, g, b):
-    return colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
+def rgb_to_xyz(r, g, b):
+    var_R = r / 255.0
+    var_G = g / 255.0
+    var_B = b / 255.0
+
+    if var_R > 0.04045:
+        var_R = ((var_R + 0.055) / 1.055) ** 2.4
+    else:
+        var_R = var_R / 12.92
+    if var_G > 0.04045:
+        var_G = ((var_G + 0.055) / 1.055) ** 2.4
+    else:
+        var_G = var_G / 12.92
+    if var_B > 0.04045:
+        var_B = ((var_B + 0.055) / 1.055) ** 2.4
+    else:
+        var_B = var_B / 12.92
+
+    var_R = var_R * 100
+    var_G = var_G * 100
+    var_B = var_B * 100
+
+    X = var_R * 0.4124 + var_G * 0.3576 + var_B * 0.1805
+    Y = var_R * 0.2126 + var_G * 0.7152 + var_B * 0.0722
+    Z = var_R * 0.0193 + var_G * 0.1192 + var_B * 0.9505
+
+    return X, Y, Z
 
 
-def color_difference(color1, color2):
-    return np.sqrt(sum((e1 - e2) ** 2 for e1, e2 in zip(color1, color2)))
+def xyz_to_lab(X, Y, Z):
+    var_X = X / REF_X
+    var_Y = Y / REF_Y
+    var_Z = Z / REF_Z
+
+    if var_X > 0.008856:
+        var_X = var_X ** (1/3)
+    else:
+        var_X = (7.787 * var_X) + (16 / 116)
+    if var_Y > 0.008856:
+        var_Y = var_Y ** (1/3)
+    else:
+        var_Y = (7.787 * var_Y) + (16 / 116)
+    if var_Z > 0.008856:
+        var_Z = var_Z ** (1/3)
+    else:
+        var_Z = (7.787 * var_Z) + (16 / 116)
+
+    L = (116 * var_Y) - 16
+    a = 500 * (var_X - var_Y)
+    b = 200 * (var_Y - var_Z)
+
+    return L, a, b
+
+
+def delta_e94(lab1, lab2, WHT_L=1, WHT_C=1, WHT_H=1):
+    L1, a1, b1 = lab1
+    L2, a2, b2 = lab2
+
+    xC1 = np.sqrt(a1**2 + b1**2)
+    xC2 = np.sqrt(a2**2 + b2**2)
+    xDL = L2 - L1
+    xDC = xC2 - xC1
+    xDE = np.sqrt((L1 - L2)**2 + (a1 - a2)**2 + (b1 - b2)**2)
+    xDH = xDE**2 - xDL**2 - xDC**2
+
+    if xDH > 0:
+        xDH = np.sqrt(xDH)
+    else:
+        xDH = 0
+
+    xSC = 1 + 0.045 * xC1
+    xSH = 1 + 0.015 * xC1
+    xDL /= WHT_L
+    xDC /= (WHT_C * xSC)
+    xDH /= (WHT_H * xSH)
+
+    delta_E94 = np.sqrt(xDL**2 + xDC**2 + xDH**2)
+
+    return delta_E94
 
 
 def find_closest_color(input_color, palette):
     input_rgb = hex_to_rgb(input_color)
-    input_hsv = rgb_to_hsv(*input_rgb)
+    input_xyz = rgb_to_xyz(*input_rgb)
+    input_lab = xyz_to_lab(*input_xyz)
 
     differences = []
 
-    for color in palette:
+    for idx, color in enumerate(palette):
         palette_rgb = hex_to_rgb(color)
-        palette_hsv = rgb_to_hsv(*palette_rgb)
+        palette_xyz = rgb_to_xyz(*palette_rgb)
+        palette_lab = xyz_to_lab(*palette_xyz)
 
-        rgb_diff = color_difference(input_rgb, palette_rgb)
-        hsv_diff = color_difference(input_hsv, palette_hsv)
-
-        avg_diff = (rgb_diff + hsv_diff) / 2
-        differences.append((avg_diff, color))
+        diff = delta_e94(input_lab, palette_lab)
+        differences.append((diff, color, idx + 1))  # Store the index (1-based)
 
     differences.sort()
     closest_color = differences[0][1]
-    return closest_color
+    closest_index = differences[0][2]
+    return closest_color, closest_index
 
-
-def plot_color_mappings(input_colors, mapped_colors):
+def plot_color_mappings(input_colors, mapped_colors, mapped_indices):
     num_colors = len(input_colors)
-    fig, axes = plt.subplots(30, 2, figsize=(20, 5))
+    fig, axes = plt.subplots(2, num_colors, figsize=(20, 5))
 
     for i in range(num_colors):
         input_rgb = np.array([[hex_to_rgb(input_colors[i])]], dtype=np.uint8)
         closest_rgb = np.array([[hex_to_rgb(mapped_colors[i])]], dtype=np.uint8)
 
-        axes[i, 0].imshow(input_rgb, aspect='auto')
-        axes[i, 0].set_title(f'Original Color: {input_colors[i]}')
-        axes[i, 0].axis('off')
+        axes[0, i].imshow(input_rgb, aspect='auto')
+        axes[0, i].axis('off')
 
-        axes[i, 1].imshow(closest_rgb, aspect='auto')
-        axes[i, 1].set_title(f'Mapped Color: {mapped_colors[i]}')
-        axes[i, 1].axis('off')
+        axes[1, i].imshow(closest_rgb, aspect='auto')
+        axes[1, i].axis('off')
 
     plt.tight_layout()
     plt.show()
 
+# Comprehensive test case covering the full spectrum of colors
+test_rgb_colors_full_spectrum = [
 
-# Example usage
-test_rgb_colors = [
-    [235, 237, 229],
-    [51, 47, 44],
-    [214, 163, 120],
-    [238, 185, 143],
-    [184, 130, 92],
-    [21, 22, 23],
-    [187, 197, 176],
-    [134, 115, 109],
-    [248, 176, 84],
-    [146, 96, 60],
-    [245, 117, 34],
-    [162, 154, 145],
-    [198, 226, 211],
-    [89, 77, 69],
-    [246, 215, 165]
+# here take the input of all the dominant colors and integrate this code into the function replace_colors_with_palette
+    # Gold
 ]
+
+# Convert test RGB colors to hex
+test_hex_colors_full_spectrum = [rgb_to_hex(color) for color in test_rgb_colors_full_spectrum]
+
+# Define the palette (using previously defined palette_hex)
 palette_hex = [
     "#FFFDD0", "#F8CEA4", "#F8F6F0", "#F3F4F7", "#FEFFFA", "#F2DEB6", "#C47E5A", "#907954",
     "#B59E5F", "#C28F5A", "#4E3629", "#422D22", "#68553A", "#67492F", "#8D2B00",
@@ -96,11 +161,8 @@ palette_hex = [
     "#FEFFFA", "#EDB525", "#C9822A", "#F7D087", "#913832", "#BB3726", "#8A3324", "#D6AD60",
     "#D2C1A3", "#FABEAE", "#FAEBD7"
 ]
-# Convert test RGB colors to hex
-test_hex_colors = [rgb_to_hex(color) for color in test_rgb_colors]
 
-# Find closest colors
-mapped_hex_colors = [find_closest_color(color, palette_hex) for color in test_hex_colors]
-
-# Plot original vs mapped colors
-plot_color_mappings(test_hex_colors, mapped_hex_colors)
+# Find closest colors and their indices
+mapped_colors, mapped_indices = replace_colors_with_palette(test_rgb_colors_full_spectrum, None, palette_hex)
+# Plot original vs mapped colors with indices
+plot_color_mappings(test_hex_colors_full_spectrum, [rgb_to_hex(color) for color in mapped_colors], mapped_indices)

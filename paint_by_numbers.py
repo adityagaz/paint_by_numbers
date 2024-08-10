@@ -22,12 +22,12 @@ def create_cluster_posterize(image_path, clusters=10, pre_blur=True):
     dominant_colors, quantized_labels, bar_image = dominant_cluster.get_dominant_colors(
         image, n_clusters=clusters, use_gpu=True, plot=True)
 
-    # Display the color bar
-    print(type(dominant_colors))
-    plt.imshow([dominant_colors])
-    plt.show()
-    print(dominant_colors)
-    # printing clusters one by one
+    # # Display the color bar
+    # print(type(dominant_colors))
+    # plt.imshow([dominant_colors])
+    # plt.show()
+    # print(dominant_colors)
+    # # printing clusters one by one
     dominant_cluster.plot_clusters(image, quantized_labels, dominant_colors)
 
     smooth_labels = process.smoothen(quantized_labels.reshape(image.shape[:-1]))
@@ -115,9 +115,9 @@ def process_image(input_image_path, output_image_path, num_of_clusters=5, save_o
         outline_image_path = os.path.splitext(output_image_path)[0] + "_outline.jpg"
         image_utils.save_image(outline_image, outline_image_path)
 
-
-# input_image_path = '/Users/adityashandilya/Downloads/testing/test9.jpg'
-# output_image_path = '/Users/adityashandilya/Downloads/testing_output/output_test_1_1_9.jpg'
+#
+# input_image_path = '/Users/adityashandilya/Downloads/testing/test10.jpg'
+# output_image_path = '/Users/adityashandilya/Downloads/testing_output/output_test_1_1_10.jpg'
 # num_of_clusters = 15
 # save_outline = True
 # min_contour_area = 80

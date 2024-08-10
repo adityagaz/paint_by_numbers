@@ -5,74 +5,7 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import image_utils
-
-import cv2
-from skimage import color
-
-
-def rgb_to_hsv(rgb):
-    """
-    Convert RGB to HSV color space using OpenCV.
-    """
-    rgb = np.array(rgb, dtype=np.uint8).reshape(1, 1, 3)
-    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
-    return hsv.flatten().astype(float)
-
-
-def hsv_color_difference(hsv1, hsv2):
-    """
-    Calculate the perceptual difference between two HSV colors.
-    """
-    h_diff = min(abs(hsv1[0] - hsv2[0]), 180 - abs(hsv1[0] - hsv2[0])) / 180.0
-    s_diff = abs(hsv1[1] - hsv2[1]) / 255.0
-    v_diff = abs(hsv1[2] - hsv2[2]) / 255.0
-    return h_diff + s_diff + v_diff
-def rgb_to_lab(rgb):
-    """
-    Convert RGB to CIELAB color space using skimage.
-    """
-    rgb = np.array(rgb, dtype=np.uint8).reshape(1, 1, 3)
-    lab = color.rgb2lab(rgb)
-    return lab.flatten()
-
-def color_distance(c1, c2):
-    """
-    Calculate the Euclidean distance between two colors in CIELAB space.
-    """
-    lab1 = rgb_to_lab(c1)
-    lab2 = rgb_to_lab(c2)
-    return np.linalg.norm(lab1 - lab2)
-
-
-def find_closest_palette_color(color, palette, palette_hex):
-    """
-    Find the closest color in the palette to the given color.
-    Print similarity scores for debugging.
-    """
-    hsv_color = rgb_to_hsv(color)
-    distances = [hsv_color_difference(hsv_color, rgb_to_hsv(p)) for p in palette]
-
-    # Debug: Check if distances list is empty
-    if not distances:
-        print(f"Error: No distances calculated for color {color}")
-        return np.array([0, 0, 0])  # Return black or some default color
-
-    # Print the similarity scores
-    print(f"Color: {color} - HSV: {hsv_color}")
-    for i, dist in enumerate(distances):
-        print(f"  Palette Color {palette_hex[i]}: {palette[i]} - Distance: {dist}")
-
-    return palette[np.argmin(distances)]
-
-def replace_colors_with_palette(dominant_colors, palette, palette_hex):
-    """
-    Replace the dominant colors with the closest colors from the palette.
-    """
-    replaced_colors = np.array([find_closest_palette_color(c, palette, palette_hex) for c in dominant_colors])
-    replaced_colors = np.clip(replaced_colors, 0, 255).astype(np.uint8)
-    return replaced_colors
-
-
+from color_map_final import replace_colors_with_palette
 def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
     if image is None or image.size == 0:
         raise ValueError("Invalid image provided")
@@ -109,13 +42,12 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
         "#B59E5F", "#C28F5A", "#4E3629", "#422D22", "#68553A", "#67492F", "#8D2B00"
     ]
     skin_tone_rgb = np.array([mcolors.hex2color(c) for c in skin_tone_hex]) * 255
-
     # Initialize visited arrays
     visited = [False] * len(palette_rgb)
     skin_tone_visited = [False] * len(skin_tone_rgb)
 
     # Replace the dominant colors with the closest colors from the palette
-    replaced_colors = replace_colors_with_palette(centroids, palette_rgb, palette_hex)
+    replaced_colors, distances = replace_colors_with_palette(centroids, palette_rgb, palette_hex)
     replaced_colors = np.clip(replaced_colors, 0, 255).astype(np.uint8)
 
     if plot:
@@ -128,11 +60,10 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
         cluster_areas = [np.sum(labels == i) for i in range(n_clusters)]
         sorted_indices = np.argsort(cluster_areas)[::-1]
         sorted_cluster_areas = sorted(cluster_areas, reverse=True)
-        print("Sorted cluster areas (in descending order):", sorted_cluster_areas)
+        # print("Sorted cluster areas (in descending order):", sorted_cluster_areas)
 
         # Maintain an array of distances
-        distances = [find_closest_palette_color_distances(centroid, palette_rgb) for centroid in centroids]
-
+        distances = distances
         # Color mapping with special handling for skin tones
         color_mapping = {}
         for cluster_index in sorted_indices:
@@ -159,9 +90,9 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
                         visited[palette_index] = True
                         break
 
-        print("Color mapping (cluster_index -> palette_color):")
-        for cluster_index, palette_color in color_mapping.items():
-            print(f"Cluster {cluster_index} -> {palette_color}")
+        # print("Color mapping (cluster_index -> palette_color):")
+        # for cluster_index, palette_color in color_mapping.items():
+        #     print(f"Cluster {cluster_index} -> {palette_color}")
 
         labels_reshaped = labels.reshape(image.shape[0], image.shape[1])
         new_image = np.zeros_like(image)
@@ -171,78 +102,40 @@ def get_dominant_colors(image, n_clusters=10, use_gpu=False, plot=True):
         return replaced_colors, labels, bar_image
     return replaced_colors, labels
 
-def find_closest_palette_color_distances(centroid, palette):
-    hsv_centroid = rgb_to_hsv(centroid)
-    return [hsv_color_difference(hsv_centroid, rgb_to_hsv(p)) for p in palette]
 
-
-def find_closest_palette_color_distances(centroid, palette):
-    hsv_centroid = rgb_to_hsv(centroid)
-    return [hsv_color_difference(hsv_centroid, rgb_to_hsv(p)) for p in palette]
-
-
-def find_closest_palette_color_distances(centroid, palette):
-    hsv_centroid = rgb_to_hsv(centroid)
-    return [hsv_color_difference(hsv_centroid, rgb_to_hsv(p)) for p in palette]
-
-def find_closest_palette_color_distances(centroid, palette):
-    hsv_centroid = rgb_to_hsv(centroid)
-    return [hsv_color_difference(hsv_centroid, rgb_to_hsv(p)) for p in palette]
-
-
-def find_closest_palette_color(color, palette, palette_hex):
-    """
-    Find the closest color in the palette to the given color.
-    Print similarity scores for debugging.
-    """
-    hsv_color = rgb_to_hsv(color)
-    distances = [hsv_color_difference(hsv_color, rgb_to_hsv(p)) for p in palette]
-
-    # Debug: Check if distances list is empty
-    if not distances:
-        print(f"Error: No distances calculated for color {color}")
-        return np.array([0, 0, 0])  # Return black or some default color
-
-    # Print the similarity scores
-    print(f"Color: {color} - HSV: {hsv_color}")
-    for i, dist in enumerate(distances):
-        print(f"  Palette Color {palette_hex[i]}: {palette[i]} - Distance: {dist}")
-
-    return palette[np.argmin(distances)]
-
-def plot_clusters(image, labels, centroids):
-    # Reshape labels to the shape of the original image
-    labels_reshaped = labels.reshape(image.shape[0], image.shape[1])
-
-    # Calculate number of rows and columns for subplots
-    n_clusters = centroids.shape[0]
-    n_cols = 5
-    n_rows = (n_clusters + n_cols - 1) // n_cols  # Ceiling division
-
-    # Set the figure size to fit 1200 pixels width
-    fig_width = 12  # 1200 pixels
-    fig_height = 2.4 * n_rows  # Adjust height to maintain aspect ratio
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height))
-
-    # Flatten axes array if there are multiple rows
-    if n_rows > 1:
-        axes = axes.flatten()
-
-    # Iterate through each cluster index
-    for cluster_index in range(n_clusters):
-        # Create an image for the current cluster with a white background
-        cluster_image = np.ones_like(image) * 255  # Set background to white
-        cluster_image[labels_reshaped == cluster_index] = image[labels_reshaped == cluster_index]
-
-        # Display the cluster image
-        ax = axes[cluster_index]
-        ax.imshow(cluster_image)
-        ax.set_title(f'Cluster {cluster_index + 1}', fontsize=14)
-        ax.axis('off')
-
-    # Hide any remaining empty subplots
-    for ax in axes[n_clusters:]:
-        ax.axis('off')
-
-    plt.tight_layout()
-    plt.show()
+# def plot_clusters(image, labels, centroids):
+#     # Reshape labels to the shape of the original image
+#     labels_reshaped = labels.reshape(image.shape[0], image.shape[1])
+#
+#     # Calculate number of rows and columns for subplots
+#     n_clusters = centroids.shape[0]
+#     n_cols = 5
+#     n_rows = (n_clusters + n_cols - 1) // n_cols  # Ceiling division
+#
+#     # Set the figure size to fit 1200 pixels width
+#     fig_width = 12  # 1200 pixels
+#     fig_height = 2.4 * n_rows  # Adjust height to maintain aspect ratio
+#     fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height))
+#
+#     # Flatten axes array if there are multiple rows
+#     if n_rows > 1:
+#         axes = axes.flatten()
+#
+#     # Iterate through each cluster index
+#     for cluster_index in range(n_clusters):
+#         # Create an image for the current cluster with a white background
+#         cluster_image = np.ones_like(image) * 255  # Set background to white
+#         cluster_image[labels_reshaped == cluster_index] = image[labels_reshaped == cluster_index]
+#
+#         # Display the cluster image
+#         ax = axes[cluster_index]
+#         ax.imshow(cluster_image)
+#         ax.set_title(f'Cluster {cluster_index + 1}', fontsize=14)
+#         ax.axis('off')
+#
+#     # Hide any remaining empty subplots
+#     for ax in axes[n_clusters:]:
+#         ax.axis('off')
+#
+#     plt.tight_layout()
+#     plt.show()
