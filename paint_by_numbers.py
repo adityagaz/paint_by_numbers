@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 
 
+
 def simple_matrix_to_image(mat, palette):
     simple_mat_flat = np.array(
         [[col for col in palette[index]] for index in mat.flatten()])
